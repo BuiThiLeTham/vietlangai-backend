@@ -1,0 +1,203 @@
+{
+  "languages": [
+    {
+      "code": "tyz",
+      "iso639_3": "tyz",
+      "name_vi": "Tiếng Tày",
+      "name_en": "Tay",
+      "script": "Latn",
+      "family": "Tai-Kadai",
+      "role": "ethnic",
+      "evaluation_tier": 1,
+      "nllb_code": null,
+      "orthography": "Latin theo chữ Quốc ngữ",
+      "mt_status": "public_bitext",
+      "asr_status": "collect",
+      "ocr_status": "latin"
+    },
+    {
+      "code": "rad",
+      "iso639_3": "rad",
+      "name_vi": "Tiếng Ê Đê",
+      "name_en": "Rade (Ede)",
+      "script": "Latn",
+      "family": "Austronesian, Chamic",
+      "role": "ethnic",
+      "evaluation_tier": 1,
+      "nllb_code": null,
+      "orthography": "Latin",
+      "mt_status": "public_bitext",
+      "asr_status": "collect",
+      "ocr_status": "latin"
+    },
+    {
+      "code": "cjm",
+      "iso639_3": "cjm",
+      "name_vi": "Tiếng Chăm",
+      "name_en": "Eastern Cham",
+      "script": "Cham",
+      "family": "Austronesian, Chamic",
+      "role": "ethnic",
+      "evaluation_tier": 1,
+      "nllb_code": null,
+      "orthography": "Akhar Thrah; bản Latin dùng trong học liệu",
+      "mt_status": "scarce_bitext",
+      "asr_status": "collect",
+      "ocr_status": "cham_script"
+    },
+    {
+      "code": "hmn",
+      "iso639_3": "hmn",
+      "name_vi": "Tiếng H'Mông",
+      "name_en": "Hmong",
+      "script": "Latn",
+      "family": "Hmong-Mien",
+      "role": "ethnic",
+      "evaluation_tier": 2,
+      "nllb_code": null,
+      "orthography": "Latin phổ thông Việt Nam, khác RPA hải ngoại",
+      "mt_status": "speech_text_pairs",
+      "asr_status": "public_audio",
+      "ocr_status": "latin"
+    },
+    {
+      "code": "jra",
+      "iso639_3": "jra",
+      "name_vi": "Tiếng Jrai",
+      "name_en": "Jarai",
+      "script": "Latn",
+      "family": "Austronesian, Chamic",
+      "role": "ethnic",
+      "evaluation_tier": 2,
+      "nllb_code": null,
+      "orthography": "Latin",
+      "mt_status": "prior_smt",
+      "asr_status": "collect",
+      "ocr_status": "latin"
+    },
+    {
+      "code": "vi",
+      "iso639_3": "vie",
+      "name_vi": "Tiếng Việt",
+      "name_en": "Vietnamese",
+      "script": "Latn",
+      "family": "Austroasiatic, Vietic",
+      "role": "pivot",
+      "evaluation_tier": 0,
+      "nllb_code": "vie_Latn",
+      "orthography": "Latin",
+      "mt_status": "high_resource",
+      "asr_status": "whisper",
+      "ocr_status": "latin"
+    },
+    {
+      "code": "en",
+      "iso639_3": "eng",
+      "name_vi": "Tiếng Anh",
+      "name_en": "English",
+      "script": "Latn",
+      "family": "Indo-European, Germanic",
+      "role": "pivot",
+      "evaluation_tier": 0,
+      "nllb_code": "eng_Latn",
+      "orthography": "Latin",
+      "mt_status": "high_resource",
+      "asr_status": "whisper",
+      "ocr_status": "latin"
+    }
+  ],
+  "peoples": [
+    {
+      "slug": "tay",
+      "language_code": "tyz",
+      "name_vi": "Người Tày",
+      "name_en": "Tay people",
+      "region_vi": "Cao Bằng, Lạng Sơn, Bắc Kạn, Tuyên Quang, Thái Nguyên và các tỉnh phía Bắc",
+      "region_en": "Cao Bang, Lang Son, Bac Kan, Tuyen Quang, Thai Nguyen and other northern provinces",
+      "origin_vi": "Tiếng Tày thuộc nhánh Tai, họ Tai-Kadai, gần với tiếng Nùng và các ngôn ngữ Tai phía nam Trung Quốc. Chữ viết hiện dùng là Latin dựa trên chữ Quốc ngữ. Đây là ngôn ngữ có câu song song Việt công khai tương đối nhiều, nên được ưu tiên fine-tune trước.",
+      "origin_en": "Tay is a Tai language in the Tai-Kadai family, close to Nung and other southern Tai languages. Its modern writing is Latin based on the Vietnamese alphabet. Public Vietnamese parallel text is relatively available, so it is a first fine-tune target."
+    },
+    {
+      "slug": "ede",
+      "language_code": "rad",
+      "name_vi": "Người Ê Đê",
+      "name_en": "Ede (Rade) people",
+      "region_vi": "Đắk Lắk và các tỉnh Tây Nguyên",
+      "region_en": "Dak Lak and the Central Highlands",
+      "origin_vi": "Tiếng Ê Đê thuộc nhóm Chamic, họ Nam Đảo, cùng nhánh với tiếng Jrai và tiếng Chăm. Chữ Latin đã được dùng ổn định trong học liệu và văn bản. Corpus song song Ê Đê–Việt công khai là nguồn fine-tune chính của giai đoạn một.",
+      "origin_en": "Ede belongs to the Chamic branch of Austronesian, together with Jarai and Cham. A stable Latin orthography is used in textbooks and documents. The public Ede–Vietnamese corpus is a primary phase-one fine-tune source."
+    },
+    {
+      "slug": "cham",
+      "language_code": "cjm",
+      "name_vi": "Người Chăm",
+      "name_en": "Cham people",
+      "region_vi": "Ninh Thuận, Bình Thuận và một số cộng đồng khác ở Nam Trung Bộ",
+      "region_en": "Ninh Thuan, Binh Thuan and other communities in south-central Vietnam",
+      "origin_vi": "Tiếng Chăm Đông (mã cjm) thuộc nhóm Chamic. Chữ Akhar Thrah là chữ truyền thống; học liệu song ngữ còn dùng dạng Latin. Dữ liệu câu song song công khai còn mỏng, nên mô hình giai đoạn một tận dụng chuyển giao từ Ê Đê và Jrai, rồi mới fine-tune khi corpus được rà soát.",
+      "origin_en": "Eastern Cham (cjm) is Chamic. Akhar Thrah is the traditional script; bilingual teaching materials also use a Latin transcription. Public sentence pairs are still scarce, so phase one transfers from Ede and Jarai before fine-tuning on a reviewed corpus."
+    },
+    {
+      "slug": "hmong",
+      "language_code": "hmn",
+      "name_vi": "Người H'Mông",
+      "name_en": "Hmong people",
+      "region_vi": "Hà Giang, Lào Cai, Sơn La, Điện Biên, Lai Châu và vùng núi phía Bắc",
+      "region_en": "Ha Giang, Lao Cai, Son La, Dien Bien, Lai Chau and the northern highlands",
+      "origin_vi": "Tiếng H'Mông thuộc họ Hmong-Mien. Chính tả Latin dùng trong tiếng Việt khác hệ RPA của cộng đồng hải ngoại, nên không được trộn với mô hình Hmong–Thái. Nguồn VOV có cặp âm thanh, chữ H'Mông và tiếng Việt, vì vậy H'Mông là ngôn ngữ đầu tiên cho nhánh nhận dạng giọng nói.",
+      "origin_en": "Hmong is a Hmong-Mien language. The Latin orthography used in Vietnam is not the overseas RPA, so those models must not be mixed. VOV material pairs audio, Vietnamese Hmong text and Vietnamese, which makes Hmong the first speech-recognition target."
+    },
+    {
+      "slug": "jrai",
+      "language_code": "jra",
+      "name_vi": "Người Jrai",
+      "name_en": "Jarai people",
+      "region_vi": "Gia Lai, Kon Tum và khu vực lân cận ở Tây Nguyên",
+      "region_en": "Gia Lai, Kon Tum and nearby Central Highlands areas",
+      "origin_vi": "Tiếng Jrai thuộc nhóm Chamic, gần với tiếng Ê Đê. Đã có hệ dịch thống kê Jrai–Việt từ năm 2012 và từ điển song ngữ, nhưng corpus câu công khai trên Hugging Face còn ít. Giai đoạn một dùng chuyển giao từ Ê Đê, giữ đúng chính tả Jrai khi nhập dữ liệu mới.",
+      "origin_en": "Jarai is Chamic and close to Ede. A statistical Jarai–Vietnamese system existed in 2012, along with bilingual dictionaries, but public sentence corpora are still limited. Phase one transfers from Ede and keeps Jarai orthography when new data is imported."
+    }
+  ],
+  "heritage": [
+    {
+      "slug": "tay",
+      "kind": "article",
+      "title_vi": "Chữ và tiếng trong đời sống",
+      "title_en": "Language in daily life",
+      "body_vi": "Người Tày dùng tiếng Tày trong gia đình, nghi lễ và làn then. Kho bảo tồn của Ngôn Sắc Việt dành chỗ cho ảnh, video ngắn và câu chuyện đã được cộng đồng xác nhận, thay vì tự sinh câu chưa được kiểm chứng.",
+      "body_en": "Tay is used at home, in rituals and in then singing. Ngon Sac Viet keeps a place for photos, short videos and stories confirmed by the community, instead of generating unverified sentences."
+    },
+    {
+      "slug": "ede",
+      "kind": "article",
+      "title_vi": "Sử thi và lời nói",
+      "title_en": "Epics and speech",
+      "body_vi": "Sử thi, luật tục và lời chào Ê Đê là phần di sản cần thu cùng người nói. Ảnh và video ngắn sẽ gắn với bản dịch đã rà soát, không gắn với câu do mô hình bịa.",
+      "body_en": "Ede epics, customary law and greetings need to be recorded with speakers. Photos and short videos stay attached to reviewed translations, not to sentences invented by a model."
+    },
+    {
+      "slug": "cham",
+      "kind": "article",
+      "title_vi": "Hai lớp chữ viết",
+      "title_en": "Two writing layers",
+      "body_vi": "Văn bản Chăm có thể là chữ Akhar Thrah hoặc dạng Latin. Ứng dụng tách hai lớp này: OCR chữ Chăm là việc riêng, dịch văn bản Latin đi trước vì bám học liệu song ngữ.",
+      "body_en": "Cham documents may use Akhar Thrah or Latin. The app keeps those layers apart: Cham-script OCR is its own task, while Latin text is translated first because it matches bilingual teaching materials."
+    },
+    {
+      "slug": "hmong",
+      "kind": "article",
+      "title_vi": "Giọng nói và chính tả",
+      "title_en": "Speech and spelling",
+      "body_vi": "Tiếng H'Mông ở Việt Nam có bản ghi VOV kèm chữ và lời Việt. Kho này ưu tiên các đoạn ngắn đã có phiên âm đúng chính tả trong nước, rồi mới gắn video cộng đồng.",
+      "body_en": "Vietnamese Hmong has VOV recordings with spelling and a Vietnamese line. This archive prefers short clips already transcribed in the domestic orthography before community video is attached."
+    },
+    {
+      "slug": "jrai",
+      "kind": "article",
+      "title_vi": "Lời nói ở Tây Nguyên",
+      "title_en": "Speech in the highlands",
+      "body_vi": "Tiếng Jrai là ngôn ngữ giao tiếp chính của cộng đồng ở Gia Lai và Kon Tum. Tư liệu đưa vào hệ thống cần ghi rõ vùng phương ngữ và người rà soát.",
+      "body_en": "Jarai is a main community language in Gia Lai and Kon Tum. Material entered into the system should name the dialect area and the reviewer."
+    }
+  ]
+}
