@@ -38,6 +38,89 @@ def test_translate_text_and_image_fallback(client):
     assert image.json()["recognized_text"] == "xin chào"
 
 
+class SpeechOnlyMl:
+    """ASR exists for H'Mông, translation does not yet."""
+
+    def __init__(self) -> None:
+        self.translate_calls: list[dict] = []
+
+    async def translate(self, body: dict) -> dict:
+        from app.integrations.ml_client import MlError
+
+        self.translate_calls.append(body)
+        raise MlError(422, {"code": "model_not_ready", "message": "Chưa có mô hình."})
+
+    async def asr(self, filename: str, content: bytes, content_type: str) -> dict:
+        return {"text": "kuv mus tsev", "engine": "whisper", "language": "hmn", "warnings": ["Nghe lại."]}
+
+
+def test_speech_keeps_transcript_when_translation_is_not_ready(client):
+    from app.integrations.ml_client import get_ml_client
+    from app.main import app
+
+    fake = SpeechOnlyMl()
+    app.dependency_overrides[get_ml_client] = lambda: fake
+    response = client.post(
+        "/v1/translate/speech",
+        data={"target_lang": "vi"},
+        files={"file": ("clip.m4a", b"fake-audio", "audio/mp4")},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["recognized_text"] == "kuv mus tsev"
+    assert body["text"] == ""
+    assert body["source_lang"] == "hmn"
+    assert body["detected_lang"] == "hmn"
+    assert body["warnings"] == ["Nghe lại.", "Chưa có mô hình."]
+    assert fake.translate_calls[0]["source_lang"] == "hmn"
+
+
+class SpeechTranslationMl:
+    """The checkpoint hears H'Mông and writes Vietnamese."""
+
+    def __init__(self) -> None:
+        self.translate_calls: list[dict] = []
+
+    async def translate(self, body: dict) -> dict:
+        self.translate_calls.append(body)
+        return {"text": "I go home", "source_lang": body["source_lang"], "target_lang": body["target_lang"], "warnings": []}
+
+    async def asr(self, filename: str, content: bytes, content_type: str) -> dict:
+        return {
+            "text": "tôi về nhà",
+            "engine": "whisper",
+            "language": "vi",
+            "spoken_language": "hmn",
+            "warnings": ["Dịch máy."],
+        }
+
+
+def test_speech_translation_uses_the_text_language(client):
+    from app.integrations.ml_client import get_ml_client
+    from app.main import app
+
+    fake = SpeechTranslationMl()
+    app.dependency_overrides[get_ml_client] = lambda: fake
+    to_vi = client.post(
+        "/v1/translate/speech",
+        data={"target_lang": "vi", "source_lang": "hmn"},
+        files={"file": ("clip.m4a", b"fake-audio", "audio/mp4")},
+    ).json()
+    assert to_vi["text"] == "tôi về nhà"
+    assert to_vi["warnings"] == ["Dịch máy."]
+    assert fake.translate_calls == []
+
+    to_en = client.post(
+        "/v1/translate/speech",
+        data={"target_lang": "en", "source_lang": "tyz"},
+        files={"file": ("clip.m4a", b"fake-audio", "audio/mp4")},
+    ).json()
+    assert fake.translate_calls[0]["source_lang"] == "vi"
+    assert to_en["text"] == "I go home"
+    assert to_en["recognized_text"] == "tôi về nhà"
+    assert len(to_en["warnings"]) == 2
+
+
 def test_lesson_hides_answer_key(client):
     lessons = client.get("/v1/lessons").json()
     detail = client.get(f"/v1/lessons/{lessons[0]['id']}").json()

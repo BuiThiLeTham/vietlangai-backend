@@ -10,6 +10,7 @@ from app.models import Language, TranslationLog, User
 
 router = APIRouter(prefix="/translate", tags=["translate"])
 MAX_BYTES = 8 * 1024 * 1024
+MAX_AUDIO_BYTES = 20 * 1024 * 1024
 
 
 class TranslateIn(BaseModel):
@@ -56,6 +57,61 @@ async def _log(
     await db.commit()
 
 
+def _recognized_only(recognized: dict, text: str, route: str, source_lang: str, target_lang: str, warnings: list[str]) -> dict:
+    return {
+        "text": "",
+        "recognized_text": text,
+        "source_lang": source_lang,
+        "target_lang": target_lang,
+        "detected_lang": recognized.get("language"),
+        "route": route,
+        "engine": recognized.get("engine", "unloaded"),
+        "warnings": warnings,
+        "steps": [],
+    }
+
+
+async def _translate_recognized(
+    db: AsyncSession,
+    ml: MlClient,
+    user: User | None,
+    mode: str,
+    route: str,
+    recognized: dict,
+    source_lang: str,
+    target_lang: str,
+) -> dict:
+    """Translate text read by OCR or ASR. The recognized text is returned even
+    when no translator exists yet for its language."""
+    text = (recognized.get("text") or "").strip()
+    warnings = list(recognized.get("warnings", []))
+    if not text:
+        return _recognized_only(recognized, "", route, source_lang, target_lang, warnings)
+    text_lang = recognized.get("language")
+    if text_lang:
+        # A speech-translation checkpoint hears one language and writes another.
+        spoken = recognized.get("spoken_language") or text_lang
+        if source_lang not in ("auto", spoken):
+            warnings.append(f"Mô hình giọng nói chỉ nghe được {spoken}, không phải {source_lang}.")
+        source_lang = text_lang
+    if source_lang == target_lang:
+        result = _recognized_only(recognized, text, route, source_lang, target_lang, warnings)
+        result["text"] = text
+        await _log(db, user, mode, text, result)
+        return result
+    try:
+        result = await ml.translate({"text": text, "source_lang": source_lang, "target_lang": target_lang})
+    except MlError as exc:
+        if exc.status != 422:
+            raise _ml_error(exc) from exc
+        message = exc.payload.get("message", "Chưa dịch được câu này.")
+        return _recognized_only(recognized, text, route, source_lang, target_lang, [*warnings, message])
+    result["recognized_text"] = text
+    result["warnings"] = [*warnings, *result.get("warnings", [])]
+    await _log(db, user, mode, text, result)
+    return result
+
+
 @router.post("")
 async def translate_text(
     body: TranslateIn,
@@ -84,36 +140,14 @@ async def translate_image(
 ) -> dict:
     await _known(db, source_lang)
     await _known(db, target_lang)
-    content = await file.read()
+    content = await file.read(MAX_BYTES + 1)
     if len(content) > MAX_BYTES:
         raise HTTPException(status_code=413, detail={"code": "file_too_large", "message": "Ảnh vượt 8 MB."})
     try:
         recognized = await ml.ocr(file.filename or "image", content, file.content_type or "")
     except MlError as exc:
         raise _ml_error(exc) from exc
-    text = (recognized.get("text") or "").strip()
-    if not text:
-        return {
-            "text": "",
-            "recognized_text": "",
-            "source_lang": source_lang,
-            "target_lang": target_lang,
-            "detected_lang": None,
-            "route": "ocr",
-            "engine": recognized.get("engine", "unloaded"),
-            "warnings": recognized.get("warnings", []),
-            "steps": [],
-        }
-    try:
-        result = await ml.translate(
-            {"text": text, "source_lang": source_lang, "target_lang": target_lang}
-        )
-    except MlError as exc:
-        raise _ml_error(exc) from exc
-    result["recognized_text"] = text
-    result["warnings"] = [*recognized.get("warnings", []), *result.get("warnings", [])]
-    await _log(db, user, "image", text, result)
-    return result
+    return await _translate_recognized(db, ml, user, "image", "ocr", recognized, source_lang, target_lang)
 
 
 @router.post("/speech")
@@ -127,32 +161,11 @@ async def translate_speech(
 ) -> dict:
     await _known(db, source_lang)
     await _known(db, target_lang)
-    content = await file.read()
-    if len(content) > 20 * 1024 * 1024:
+    content = await file.read(MAX_AUDIO_BYTES + 1)
+    if len(content) > MAX_AUDIO_BYTES:
         raise HTTPException(status_code=413, detail={"code": "file_too_large", "message": "Audio vượt 20 MB."})
     try:
         heard = await ml.asr(file.filename or "audio", content, file.content_type or "")
     except MlError as exc:
         raise _ml_error(exc) from exc
-    text = (heard.get("text") or "").strip()
-    if not text:
-        return {
-            "text": "",
-            "recognized_text": "",
-            "source_lang": source_lang,
-            "target_lang": target_lang,
-            "detected_lang": None,
-            "route": "asr",
-            "engine": heard.get("engine", "unloaded"),
-            "warnings": heard.get("warnings", []),
-            "steps": [],
-        }
-    try:
-        result = await ml.translate(
-            {"text": text, "source_lang": source_lang, "target_lang": target_lang}
-        )
-    except MlError as exc:
-        raise _ml_error(exc) from exc
-    result["recognized_text"] = text
-    await _log(db, user, "speech", text, result)
-    return result
+    return await _translate_recognized(db, ml, user, "speech", "asr", heard, source_lang, target_lang)
