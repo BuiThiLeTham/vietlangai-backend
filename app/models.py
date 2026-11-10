@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -62,7 +62,7 @@ class EthnicGroup(Base):
     region_en: Mapped[str] = mapped_column(Text)
     origin_vi: Mapped[str] = mapped_column(Text)
     origin_en: Mapped[str] = mapped_column(Text)
-    language_code: Mapped[str] = mapped_column(ForeignKey("languages.code"))
+    language_code: Mapped[str] = mapped_column(ForeignKey("languages.code"), index=True)
 
     heritage: Mapped[list["HeritageItem"]] = relationship(back_populates="group")
 
@@ -87,7 +87,7 @@ class Lesson(Base):
     __tablename__ = "lessons"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    language_code: Mapped[str] = mapped_column(ForeignKey("languages.code"))
+    language_code: Mapped[str] = mapped_column(ForeignKey("languages.code"), index=True)
     title_vi: Mapped[str] = mapped_column(String(200))
     title_en: Mapped[str] = mapped_column(String(200))
     summary_vi: Mapped[str] = mapped_column(Text)
@@ -150,7 +150,18 @@ class TranslationLog(Base):
     output_text: Mapped[str] = mapped_column(Text)
     route: Mapped[str] = mapped_column(String(32))
     engine: Mapped[str] = mapped_column(String(64))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class QuizAttempt(Base):
+    __tablename__ = "quiz_attempts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    lesson_id: Mapped[str] = mapped_column(ForeignKey("lessons.id", ondelete="CASCADE"), index=True)
+    score: Mapped[int] = mapped_column(Integer)
+    total: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 
 class Contribution(Base):
@@ -159,7 +170,7 @@ class Contribution(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     client_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
-    language_code: Mapped[str] = mapped_column(ForeignKey("languages.code"))
+    language_code: Mapped[str] = mapped_column(ForeignKey("languages.code"), index=True)
     source_lang: Mapped[str] = mapped_column(String(16))
     target_lang: Mapped[str] = mapped_column(String(16))
     source_text: Mapped[str] = mapped_column(Text)
