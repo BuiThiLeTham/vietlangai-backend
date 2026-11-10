@@ -81,17 +81,18 @@ async def seed(session: AsyncSession) -> None:
         await _ensure_lesson(session, group, language, catalog["peoples"])
 
     settings = get_settings()
-    demo = await session.scalar(select(User).where(User.email == settings.demo_email))
-    if demo is None:
-        session.add(
-            User(
-                email=settings.demo_email,
-                password_hash=hash_password(settings.demo_password),
-                display_name=settings.demo_name,
-                role="reviewer",
-                created_at=datetime.now(timezone.utc),
+    if settings.seed_demo_user and settings.app_env != "production":
+        demo = await session.scalar(select(User).where(User.email == settings.demo_email))
+        if demo is None:
+            session.add(
+                User(
+                    email=settings.demo_email,
+                    password_hash=hash_password(settings.demo_password),
+                    display_name=settings.demo_name,
+                    role="reviewer",
+                    created_at=datetime.now(timezone.utc),
+                )
             )
-        )
     await session.commit()
 
 
