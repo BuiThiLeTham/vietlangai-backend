@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.deps import get_current_user, get_db
 from app.models import Contribution, Language, User
 
@@ -94,7 +95,7 @@ async def _save(db: AsyncSession, user: User, body: ContributionIn) -> Contribut
 
 
 def _reviewer(user: User) -> User:
-    if user.role != "reviewer":
+    if user.role not in ("reviewer", "admin"):
         raise HTTPException(
             status_code=403,
             detail={"code": "forbidden", "message": "Chỉ người rà soát mới được duyệt câu."},
@@ -127,13 +128,15 @@ async def mine(user: User = Depends(get_current_user), db: AsyncSession = Depend
 @router.get("/contributions")
 async def queue(
     status: str = "pending",
+    language_code: str | None = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
     _reviewer(user)
-    rows = (
-        await db.scalars(select(Contribution).where(Contribution.status == status).order_by(Contribution.created_at))
-    ).all()
+    query = select(Contribution).where(Contribution.status == status)
+    if language_code:
+        query = query.where(Contribution.language_code == language_code)
+    rows = (await db.scalars(query.order_by(Contribution.created_at))).all()
     return [contribution_out(row) for row in rows]
 
 
@@ -148,6 +151,11 @@ async def review(
     row = await db.get(Contribution, contribution_id)
     if row is None:
         raise HTTPException(status_code=404, detail={"code": "not_found", "message": "Không thấy đóng góp."})
+    if not get_settings().allow_self_review and user.role != "admin" and row.user_id == user.id:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "self_review_forbidden", "message": "Không được tự duyệt câu đóng góp của chính mình."},
+        )
     row.status = body.status
     row.review_note = body.review_note
     row.reviewer_id = user.id
@@ -173,7 +181,10 @@ async def push(
 
 
 @router.get("/sync/pull")
-async def pull(db: AsyncSession = Depends(get_db)) -> dict:
+async def pull(
+    updated_after: datetime | None = None,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
     from sqlalchemy.orm import selectinload
 
     from app.models import EthnicGroup, Lesson, QuizQuestion
@@ -194,9 +205,10 @@ async def pull(db: AsyncSession = Depends(get_db)) -> dict:
             .order_by(Lesson.title_vi)
         )
     ).all()
-    approved = (
-        await db.scalars(select(Contribution).where(Contribution.status == "approved").order_by(Contribution.created_at))
-    ).all()
+    approved_query = select(Contribution).where(Contribution.status == "approved")
+    if updated_after is not None:
+        approved_query = approved_query.where(Contribution.updated_at >= updated_after)
+    approved = (await db.scalars(approved_query.order_by(Contribution.created_at))).all()
     return {
         "languages": languages,
         "peoples": [
@@ -222,11 +234,22 @@ async def pull(db: AsyncSession = Depends(get_db)) -> dict:
 
 
 @router.get("/training/pairs.csv", response_class=PlainTextResponse)
-async def export_pairs(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> str:
+async def export_pairs(
+    language_code: str | None = None,
+    source_lang: str | None = None,
+    target_lang: str | None = None,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> str:
     _reviewer(user)
-    rows = (
-        await db.scalars(select(Contribution).where(Contribution.status == "approved").order_by(Contribution.created_at))
-    ).all()
+    query = select(Contribution).where(Contribution.status == "approved")
+    if language_code:
+        query = query.where(Contribution.language_code == language_code)
+    if source_lang:
+        query = query.where(Contribution.source_lang == source_lang)
+    if target_lang:
+        query = query.where(Contribution.target_lang == target_lang)
+    rows = (await db.scalars(query.order_by(Contribution.created_at))).all()
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow(["source_lang", "target_lang", "source", "target", "verified"])

@@ -33,6 +33,11 @@ class RefreshIn(BaseModel):
     refresh_token: str
 
 
+class ChangePasswordIn(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8, max_length=128)
+
+
 class TokenOut(BaseModel):
     access_token: str
     refresh_token: str
@@ -145,3 +150,29 @@ async def logout(body: RefreshIn, db: AsyncSession = Depends(get_db)) -> None:
 @router.get("/me", response_model=UserOut)
 async def me(user: User = Depends(get_current_user)) -> UserOut:
     return UserOut(id=user.id, email=user.email, display_name=user.display_name, role=user.role)
+
+
+@router.post("/change-password", status_code=204)
+async def change_password(
+    body: ChangePasswordIn,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    if not verify_password(body.current_password, user.password_hash):
+        raise HTTPException(
+            status_code=401,
+            detail={"code": "invalid_password", "message": "Mật khẩu hiện tại không đúng."},
+        )
+    user.password_hash = hash_password(body.new_password)
+    now = datetime.now(timezone.utc)
+    active_tokens = (
+        await db.scalars(
+            select(RefreshToken).where(
+                RefreshToken.user_id == user.id,
+                RefreshToken.revoked_at.is_(None),
+            )
+        )
+    ).all()
+    for tok in active_tokens:
+        tok.revoked_at = now
+    await db.commit()
