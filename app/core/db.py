@@ -35,10 +35,12 @@ def make_engine(url: str):
         if ":memory:" not in url and "///" in url:
             Path(url.split("///", 1)[1]).parent.mkdir(parents=True, exist_ok=True)
     elif url.startswith("postgres"):
-        # Support both AWS RDS PostgreSQL and Supabase transaction pooler.
+        # Support local Postgres, AWS RDS, and Supabase transaction pooler.
         url = url.split("?", 1)[0]
         connect_args: dict = {"statement_cache_size": settings.db_statement_cache_size}
-        if settings.db_ssl_require:
+        host = url.split("@")[-1].split("/")[0].split(":")[0].lower()
+        local_host = host in {"127.0.0.1", "localhost", "::1"}
+        if settings.db_ssl_require and not local_host:
             connect_args["ssl"] = "require"
         kwargs["connect_args"] = connect_args
         kwargs["pool_pre_ping"] = True

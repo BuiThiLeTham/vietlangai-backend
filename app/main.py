@@ -7,6 +7,7 @@ from app.core.config import get_settings
 from app.core.db import check_db_health, get_session, init_db, shutdown_db
 from app.core.exceptions import register_exception_handlers
 from app.core.rate_limit import RateLimitMiddleware
+from app.glossary_export import export_approved_glossary
 from app.routers import auth, catalog, community, learn, translate
 from app.seed import seed
 
@@ -15,9 +16,11 @@ from app.seed import seed
 async def lifespan(_app: FastAPI):
     settings = get_settings()
     await init_db(settings.database_url)
-    if settings.auto_seed:
-        async for session in get_session():
+    async for session in get_session():
+        if settings.auto_seed:
             await seed(session)
+        await export_approved_glossary(session)
+        break
     yield
     await shutdown_db()
 

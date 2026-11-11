@@ -3,9 +3,12 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
+from app.core.config import get_settings
+
 
 def catalog_path() -> Path:
-    override = os.environ.get("LANGUAGES_CATALOG")
+    settings = get_settings()
+    override = os.environ.get("LANGUAGES_CATALOG") or settings.languages_catalog
     if override:
         return Path(override)
     for parent in Path(__file__).resolve().parents:

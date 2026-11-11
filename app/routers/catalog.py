@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import or_, select
+from sqlalchemy import case, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -7,6 +7,20 @@ from app.core.deps import get_db
 from app.models import EthnicGroup, HeritageItem, Language
 
 router = APIRouter(tags=["catalog"])
+
+
+def language_sort_key():
+    """Ethnic first (Latin before Cham script), then Vietnamese, then English."""
+    return (
+        case(
+            (Language.role == "ethnic", 0),
+            (Language.code == "vi", 1),
+            else_=2,
+        ),
+        Language.evaluation_tier,
+        case((Language.script == "Latn", 0), else_=1),
+        Language.code,
+    )
 
 
 def language_out(row: Language) -> dict:
@@ -43,7 +57,7 @@ async def languages(
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
-    query = select(Language).order_by(Language.evaluation_tier, Language.code)
+    query = select(Language).order_by(*language_sort_key())
     if role:
         query = query.where(Language.role == role)
     if q:

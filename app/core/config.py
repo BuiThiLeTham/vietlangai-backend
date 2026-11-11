@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     ml_api_key: str = ""
     ml_text_timeout: float = 60.0
     ml_file_timeout: float = 180.0
+    languages_catalog: str = ""
+    glossary_export_path: str = ""
 
     max_image_mb: int = 8
     max_audio_mb: int = 20
