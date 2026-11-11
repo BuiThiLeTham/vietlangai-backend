@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     max_audio_mb: int = 20
 
     cors_origins: str = "*"
+    # Optional regex for local Flutter web / preview hosts (e.g. http://localhost:\\d+).
+    cors_origin_regex: str = ""
     auto_seed: bool = True
     seed_demo_user: bool = True
     allow_self_review: bool = True
@@ -40,6 +42,9 @@ class Settings(BaseSettings):
     rate_limit_enabled: bool = False
     rate_limit_requests: int = 120
     rate_limit_window_seconds: int = 60
+
+    # Comma-separated Google OAuth web client IDs allowed to mint API sessions.
+    google_client_ids: str = ""
 
     def validate_security(self) -> None:
         if self.app_env.lower() == "production":

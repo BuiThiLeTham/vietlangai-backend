@@ -25,6 +25,12 @@ def test_register_refresh_rotation(client):
     assert reused.status_code == 401
 
 
+def test_google_login_requires_configuration(client):
+    response = client.post("/v1/auth/google", json={"id_token": "not-a-real-google-token-value"})
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "google_not_configured"
+
+
 def test_translate_text_and_image_fallback(client):
     text = client.post("/v1/translate", json={"text": "Xin chào", "source_lang": "vi", "target_lang": "en"})
     assert text.status_code == 200

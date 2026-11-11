@@ -1,10 +1,13 @@
+import secrets
 from datetime import datetime, timezone
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.deps import get_current_user, get_db
 from app.core.security import (
     create_access_token,
@@ -36,6 +39,10 @@ class RefreshIn(BaseModel):
 class ChangePasswordIn(BaseModel):
     current_password: str
     new_password: str = Field(min_length=8, max_length=128)
+
+
+class GoogleIn(BaseModel):
+    id_token: str = Field(min_length=20)
 
 
 class TokenOut(BaseModel):
@@ -98,6 +105,57 @@ async def login(body: LoginIn, db: AsyncSession = Depends(get_db)) -> TokenOut:
     user = await db.scalar(select(User).where(User.email == body.email.lower()))
     if user is None or not verify_password(body.password, user.password_hash):
         raise _bad_login()
+    return await _issue(db, user)
+
+
+@router.post("/google", response_model=TokenOut)
+async def google_login(body: GoogleIn, db: AsyncSession = Depends(get_db)) -> TokenOut:
+    settings = get_settings()
+    allowed = {item.strip() for item in settings.google_client_ids.split(",") if item.strip()}
+    if not allowed:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "google_not_configured",
+                "message": "Đăng nhập Google chưa được cấu hình trên máy chủ.",
+            },
+        )
+    try:
+        async with httpx.AsyncClient(timeout=12.0) as client:
+            response = await client.get(
+                "https://oauth2.googleapis.com/tokeninfo",
+                params={"id_token": body.id_token},
+            )
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail={"code": "google_unreachable", "message": "Không xác minh được token Google."},
+        ) from exc
+    if response.status_code != 200:
+        raise HTTPException(
+            status_code=401,
+            detail={"code": "invalid_google_token", "message": "Token Google không hợp lệ."},
+        )
+    payload = response.json()
+    audience = str(payload.get("aud") or "")
+    email = str(payload.get("email") or "").lower().strip()
+    if audience not in allowed or not email or payload.get("email_verified") not in (True, "true"):
+        raise HTTPException(
+            status_code=401,
+            detail={"code": "invalid_google_token", "message": "Token Google không hợp lệ."},
+        )
+    display = str(payload.get("name") or email.split("@")[0]).strip()[:120] or "Thành viên"
+    user = await db.scalar(select(User).where(User.email == email))
+    if user is None:
+        user = User(
+            email=email,
+            password_hash=hash_password(secrets.token_urlsafe(32)),
+            display_name=display,
+            role="member",
+            created_at=datetime.now(timezone.utc),
+        )
+        db.add(user)
+        await db.flush()
     return await _issue(db, user)
 
 
