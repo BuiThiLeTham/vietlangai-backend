@@ -1,16 +1,53 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_db, get_optional_user
+from app.core.deps import get_current_user, get_db, get_optional_user
 from app.integrations.ml_client import MlClient, MlError, get_ml_client
 from app.models import Language, TranslationLog, User
 
 router = APIRouter(prefix="/translate", tags=["translate"])
 MAX_BYTES = 8 * 1024 * 1024
 MAX_AUDIO_BYTES = 20 * 1024 * 1024
+
+ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/webp", "image/bmp", "application/octet-stream"}
+ALLOWED_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
+ALLOWED_AUDIO_TYPES = {
+    "audio/wav",
+    "audio/x-wav",
+    "audio/mpeg",
+    "audio/mp3",
+    "audio/mp4",
+    "audio/m4a",
+    "audio/x-m4a",
+    "audio/aac",
+    "audio/ogg",
+    "audio/webm",
+    "audio/flac",
+    "video/mp4",
+    "application/octet-stream",
+}
+ALLOWED_AUDIO_EXTS = {".wav", ".mp3", ".m4a", ".mp4", ".aac", ".ogg", ".webm", ".flac"}
+
+
+def _validate_upload(content: bytes, filename: str | None, content_type: str | None, allowed_types: set[str], allowed_exts: set[str]) -> None:
+    if not content:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "empty_file", "message": "Tệp tải lên đang rỗng."},
+        )
+    ctype = (content_type or "").split(";")[0].strip().lower()
+    name = (filename or "").lower()
+    ext_ok = any(name.endswith(ext) for ext in allowed_exts)
+    type_ok = not ctype or ctype in allowed_types
+    if not type_ok and not ext_ok:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "invalid_file_type", "message": "Định dạng tệp không được hỗ trợ."},
+        )
 
 
 class TranslateIn(BaseModel):
@@ -143,6 +180,7 @@ async def translate_image(
     content = await file.read(MAX_BYTES + 1)
     if len(content) > MAX_BYTES:
         raise HTTPException(status_code=413, detail={"code": "file_too_large", "message": "Ảnh vượt 8 MB."})
+    _validate_upload(content, file.filename, file.content_type, ALLOWED_IMAGE_TYPES, ALLOWED_IMAGE_EXTS)
     try:
         recognized = await ml.ocr(file.filename or "image", content, file.content_type or "")
     except MlError as exc:
@@ -164,8 +202,42 @@ async def translate_speech(
     content = await file.read(MAX_AUDIO_BYTES + 1)
     if len(content) > MAX_AUDIO_BYTES:
         raise HTTPException(status_code=413, detail={"code": "file_too_large", "message": "Audio vượt 20 MB."})
+    _validate_upload(content, file.filename, file.content_type, ALLOWED_AUDIO_TYPES, ALLOWED_AUDIO_EXTS)
     try:
         heard = await ml.asr(file.filename or "audio", content, file.content_type or "")
     except MlError as exc:
         raise _ml_error(exc) from exc
     return await _translate_recognized(db, ml, user, "speech", "asr", heard, source_lang, target_lang)
+
+
+@router.get("/history")
+async def translation_history(
+    mode: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    query = (
+        select(TranslationLog)
+        .where(TranslationLog.user_id == user.id)
+        .order_by(TranslationLog.created_at.desc())
+    )
+    if mode:
+        query = query.where(TranslationLog.mode == mode)
+    query = query.offset(offset).limit(limit)
+    rows = (await db.scalars(query)).all()
+    return [
+        {
+            "id": row.id,
+            "mode": row.mode,
+            "source_lang": row.source_lang,
+            "target_lang": row.target_lang,
+            "source_text": row.source_text,
+            "output_text": row.output_text,
+            "route": row.route,
+            "engine": row.engine,
+            "created_at": row.created_at.isoformat(),
+        }
+        for row in rows
+    ]

@@ -97,7 +97,7 @@
       "name_en": "English",
       "script": "Latn",
       "family": "Indo-European, Germanic",
-      "role": "pivot",
+      "role": "auxiliary",
       "evaluation_tier": 0,
       "nllb_code": "eng_Latn",
       "orthography": "Latin",

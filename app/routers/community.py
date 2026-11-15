@@ -8,8 +8,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.deps import get_current_user, get_db
-from app.models import Contribution, Language, User
+from app.glossary_export import export_approved_glossary
+from app.models import Contribution, Language, Lesson, Phrase, User
 
 router = APIRouter(tags=["community"])
 
@@ -59,6 +61,63 @@ async def _require_languages(db: AsyncSession, *codes: str) -> None:
             )
 
 
+async def _require_ethnic_vi_pair(db: AsyncSession, body: ContributionIn) -> None:
+    ethnic = await db.get(Language, body.language_code)
+    if ethnic is None or ethnic.role != "ethnic":
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "ethnic_language_required",
+                "message": "Đóng góp chỉ nhận cặp tiếng dân tộc ↔ tiếng Việt.",
+            },
+        )
+    pair = {body.source_lang, body.target_lang}
+    if pair != {body.language_code, "vi"}:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "ethnic_vi_only",
+                "message": "Câu đóng góp phải là tiếng dân tộc ↔ tiếng Việt (không gửi cặp tiếng Anh).",
+            },
+        )
+
+
+async def _upsert_phrase_from_contribution(db: AsyncSession, row: Contribution) -> None:
+    """Approved ethnic↔vi pairs become verified lesson phrases. Never invent text."""
+    if row.status != "approved":
+        return
+    if {row.source_lang, row.target_lang} != {row.language_code, "vi"}:
+        return
+    if row.source_lang == row.language_code:
+        native_text, vi_text = row.source_text, row.target_text
+    else:
+        native_text, vi_text = row.target_text, row.source_text
+    lesson = await db.scalar(select(Lesson).where(Lesson.language_code == row.language_code).limit(1))
+    if lesson is None:
+        return
+    existing = await db.scalar(
+        select(Phrase).where(
+            Phrase.lesson_id == lesson.id,
+            Phrase.native_text == native_text,
+            Phrase.vi_text == vi_text,
+        )
+    )
+    if existing is not None:
+        existing.verified = True
+        existing.source = existing.source or f"contribution:{row.id}"
+        return
+    db.add(
+        Phrase(
+            lesson_id=lesson.id,
+            native_text=native_text,
+            vi_text=vi_text,
+            en_text="",
+            verified=True,
+            source=f"contribution:{row.id}",
+        )
+    )
+
+
 async def _save(db: AsyncSession, user: User, body: ContributionIn) -> Contribution:
     if body.source_lang == body.target_lang:
         raise HTTPException(
@@ -66,6 +125,7 @@ async def _save(db: AsyncSession, user: User, body: ContributionIn) -> Contribut
             detail={"code": "same_language", "message": "Câu nguồn và câu đích phải khác ngôn ngữ."},
         )
     await _require_languages(db, body.language_code, body.source_lang, body.target_lang)
+    await _require_ethnic_vi_pair(db, body)
     existing = await db.scalar(select(Contribution).where(Contribution.client_id == body.client_id))
     if existing is not None:
         if existing.user_id != user.id:
@@ -94,7 +154,7 @@ async def _save(db: AsyncSession, user: User, body: ContributionIn) -> Contribut
 
 
 def _reviewer(user: User) -> User:
-    if user.role != "reviewer":
+    if user.role not in ("reviewer", "admin"):
         raise HTTPException(
             status_code=403,
             detail={"code": "forbidden", "message": "Chỉ người rà soát mới được duyệt câu."},
@@ -127,13 +187,15 @@ async def mine(user: User = Depends(get_current_user), db: AsyncSession = Depend
 @router.get("/contributions")
 async def queue(
     status: str = "pending",
+    language_code: str | None = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
     _reviewer(user)
-    rows = (
-        await db.scalars(select(Contribution).where(Contribution.status == status).order_by(Contribution.created_at))
-    ).all()
+    query = select(Contribution).where(Contribution.status == status)
+    if language_code:
+        query = query.where(Contribution.language_code == language_code)
+    rows = (await db.scalars(query.order_by(Contribution.created_at))).all()
     return [contribution_out(row) for row in rows]
 
 
@@ -148,11 +210,20 @@ async def review(
     row = await db.get(Contribution, contribution_id)
     if row is None:
         raise HTTPException(status_code=404, detail={"code": "not_found", "message": "Không thấy đóng góp."})
+    if not get_settings().allow_self_review and user.role != "admin" and row.user_id == user.id:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "self_review_forbidden", "message": "Không được tự duyệt câu đóng góp của chính mình."},
+        )
     row.status = body.status
     row.review_note = body.review_note
     row.reviewer_id = user.id
     row.updated_at = datetime.now(timezone.utc)
+    if body.status == "approved":
+        await _upsert_phrase_from_contribution(db, row)
     await db.commit()
+    if body.status == "approved":
+        await export_approved_glossary(db)
     await db.refresh(row)
     return contribution_out(row)
 
@@ -173,14 +244,19 @@ async def push(
 
 
 @router.get("/sync/pull")
-async def pull(db: AsyncSession = Depends(get_db)) -> dict:
+async def pull(
+    updated_after: datetime | None = None,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
     from sqlalchemy.orm import selectinload
 
     from app.models import EthnicGroup, Lesson, QuizQuestion
-    from app.routers.catalog import heritage_out, language_out
+    from app.routers.catalog import heritage_out, language_out, language_sort_key
     from app.routers.learn import _lesson
 
-    languages = [language_out(row) for row in (await db.scalars(select(Language).order_by(Language.code))).all()]
+    languages = [
+        language_out(row) for row in (await db.scalars(select(Language).order_by(*language_sort_key()))).all()
+    ]
     groups = (
         await db.scalars(select(EthnicGroup).options(selectinload(EthnicGroup.heritage)).order_by(EthnicGroup.slug))
     ).all()
@@ -194,9 +270,10 @@ async def pull(db: AsyncSession = Depends(get_db)) -> dict:
             .order_by(Lesson.title_vi)
         )
     ).all()
-    approved = (
-        await db.scalars(select(Contribution).where(Contribution.status == "approved").order_by(Contribution.created_at))
-    ).all()
+    approved_query = select(Contribution).where(Contribution.status == "approved")
+    if updated_after is not None:
+        approved_query = approved_query.where(Contribution.updated_at >= updated_after)
+    approved = (await db.scalars(approved_query.order_by(Contribution.created_at))).all()
     return {
         "languages": languages,
         "peoples": [
@@ -222,11 +299,22 @@ async def pull(db: AsyncSession = Depends(get_db)) -> dict:
 
 
 @router.get("/training/pairs.csv", response_class=PlainTextResponse)
-async def export_pairs(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> str:
+async def export_pairs(
+    language_code: str | None = None,
+    source_lang: str | None = None,
+    target_lang: str | None = None,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> str:
     _reviewer(user)
-    rows = (
-        await db.scalars(select(Contribution).where(Contribution.status == "approved").order_by(Contribution.created_at))
-    ).all()
+    query = select(Contribution).where(Contribution.status == "approved")
+    if language_code:
+        query = query.where(Contribution.language_code == language_code)
+    if source_lang:
+        query = query.where(Contribution.source_lang == source_lang)
+    if target_lang:
+        query = query.where(Contribution.target_lang == target_lang)
+    rows = (await db.scalars(query.order_by(Contribution.created_at))).all()
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow(["source_lang", "target_lang", "source", "target", "verified"])

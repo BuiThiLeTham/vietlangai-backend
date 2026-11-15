@@ -94,6 +94,19 @@ create table if not exists quiz_choices (
   is_correct boolean not null default false
 );
 
+create table if not exists quiz_attempts (
+  id text primary key,
+  user_id text not null references users(id) on delete cascade,
+  lesson_id text not null references lessons(id) on delete cascade,
+  score integer not null,
+  total integer not null,
+  created_at timestamptz not null
+);
+
+create index if not exists ix_quiz_attempts_user_id on quiz_attempts(user_id);
+create index if not exists ix_quiz_attempts_lesson_id on quiz_attempts(lesson_id);
+create index if not exists ix_quiz_attempts_created_at on quiz_attempts(created_at);
+
 create table if not exists translation_logs (
   id text primary key,
   user_id text references users(id),

@@ -4,7 +4,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
-from app.core.db import get_session, init_db, shutdown_db
+from app.core.db import check_db_health, get_session, init_db, shutdown_db
+from app.core.exceptions import register_exception_handlers
+from app.core.rate_limit import RateLimitMiddleware
+from app.glossary_export import export_approved_glossary
 from app.routers import auth, catalog, community, learn, translate
 from app.seed import seed
 
@@ -13,9 +16,11 @@ from app.seed import seed
 async def lifespan(_app: FastAPI):
     settings = get_settings()
     await init_db(settings.database_url)
-    if settings.auto_seed:
-        async for session in get_session():
+    async for session in get_session():
+        if settings.auto_seed:
             await seed(session)
+        await export_approved_glossary(session)
+        break
     yield
     await shutdown_db()
 
@@ -23,10 +28,13 @@ async def lifespan(_app: FastAPI):
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title="Ngôn Sắc Việt", version="0.1.0", lifespan=lifespan)
+    register_exception_handlers(app)
+    app.add_middleware(RateLimitMiddleware)
     origins = [item.strip() for item in settings.cors_origins.split(",") if item.strip()]
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins or ["*"],
+        allow_origin_regex=settings.cors_origin_regex or None,
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -38,8 +46,13 @@ def create_app() -> FastAPI:
     app.include_router(community.router, prefix="/v1")
 
     @app.get("/health")
-    def health() -> dict:
-        return {"status": "ok", "service": "api"}
+    async def health() -> dict:
+        db_ok = await check_db_health()
+        return {
+            "status": "ok" if db_ok else "degraded",
+            "service": "api",
+            "database": "ok" if db_ok else "unavailable",
+        }
 
     return app
 

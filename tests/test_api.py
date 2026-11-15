@@ -25,6 +25,12 @@ def test_register_refresh_rotation(client):
     assert reused.status_code == 401
 
 
+def test_google_login_requires_configuration(client):
+    response = client.post("/v1/auth/google", json={"id_token": "not-a-real-google-token-value"})
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "google_not_configured"
+
+
 def test_translate_text_and_image_fallback(client):
     text = client.post("/v1/translate", json={"text": "Xin chào", "source_lang": "vi", "target_lang": "en"})
     assert text.status_code == 200
@@ -132,7 +138,27 @@ def test_lesson_hides_answer_key(client):
     assert scored.json()["total"] == 3
 
 
+def test_contribution_rejects_english_pair(client):
+    member = _auth(client)
+    headers = {"Authorization": f"Bearer {member['access_token']}"}
+    rejected = client.post(
+        "/v1/contributions",
+        headers=headers,
+        json={
+            "client_id": "device-en-pair-001",
+            "language_code": "tyz",
+            "source_lang": "tyz",
+            "target_lang": "en",
+            "source_text": "pair_en",
+            "target_text": "hello",
+        },
+    )
+    assert rejected.status_code == 400
+    assert rejected.json()["detail"]["code"] == "ethnic_vi_only"
+
+
 def test_contribution_is_reviewed_before_training_export(client):
+
     member = _auth(client)
     headers = {"Authorization": f"Bearer {member['access_token']}"}
     created = client.post(
@@ -163,6 +189,13 @@ def test_contribution_is_reviewed_before_training_export(client):
         json={"status": "approved", "review_note": "Đối chiếu thử nghiệm luồng."},
     )
     assert decision.status_code == 200
+    lessons = client.get("/v1/lessons", params={"language": "tyz"}).json()
+    assert lessons
+    lesson = client.get(f"/v1/lessons/{lessons[0]['id']}").json()
+    assert any(
+        phrase["native_text"] == "pair_a" and phrase["vi_text"] == "xin chào"
+        for phrase in lesson["phrases"]
+    )
     exported = client.get("/v1/training/pairs.csv", headers=review_headers)
     assert exported.status_code == 200
     assert "tyz,vi,pair_a,xin chào,true" in exported.text
