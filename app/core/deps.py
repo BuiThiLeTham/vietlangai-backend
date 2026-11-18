@@ -56,3 +56,12 @@ async def get_optional_user(
         return await _user_from_token(credentials.credentials, db)
     except HTTPException:
         return None
+
+
+async def require_reviewer(user: User = Depends(get_current_user)) -> User:
+    if user.role not in ("reviewer", "admin"):
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "forbidden", "message": "Chỉ người rà soát mới được duyệt câu."},
+        )
+    return user
